@@ -1,0 +1,57 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Health and diagnostic checks
+    match /_system_health/{document=**} {
+      allow read, write: if true;
+    }
+    match /health_test/{document=**} {
+      allow read, write: if true;
+    }
+
+    // User accounts
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    // Channels
+    match /channels/{channelId} {
+      allow read, write: if true;
+
+      // Channel messages subcollection
+      match /messages/{messageId} {
+        allow read, write: if true;
+      }
+    }
+
+    // Direct Channel messages collection
+    match /channel_messages/{messageId} {
+      allow read, write: if true;
+    }
+
+    // Private messages
+    match /private_messages/{messageId} {
+      allow read, write: if true;
+    }
+
+    // Trading Challenges and Milestones
+    match /challenges/{challengeId} {
+      allow read, write: if true;
+
+      // Trades subcollection
+      match /trades/{tradeId} {
+        allow read, write: if true;
+      }
+    }
+
+    // Direct trades collection
+    match /trades/{tradeId} {
+      allow read, write: if true;
+    }
+
+    // Stored files metadata
+    match /files/{fileId} {
+      allow read, write: if true;
+    }
+  }
+}
