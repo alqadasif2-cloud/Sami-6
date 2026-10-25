@@ -16,76 +16,113 @@ permissions:
 
 jobs:
   build:
-    name: Build Web & Android APK
+    name: Build Web & Android Release APK
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Checkout Source Code
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 1. Setup Node.js & Build Web Assets
+      # 2. Setup Node.js
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
+      # 3. Install Node Dependencies
       - name: Install Node Dependencies
         run: npm install --legacy-peer-deps
 
+      # 4. Build Web Application
       - name: Build Web Application
         run: npm run build
 
+      # 5. Sync Web Assets to Android
       - name: Sync Web Distribution to Android Assets
         run: |
           mkdir -p app/src/main/assets/assets
           cp -r dist/* app/src/main/assets/ 2>/dev/null || true
           cp -r public/* app/src/main/assets/ 2>/dev/null || true
 
-      # 2. Setup Java 17 for AGP 8.4.2 & Gradle 8.6
+      # 6. Setup Java 17
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: 17
 
-      # 3. Accept all Android SDK Licenses Non-Interactively
+      # 7. Accept Android SDK Licenses
       - name: Accept Android SDK Licenses
         run: |
           mkdir -p "$ANDROID_HOME/licenses" || true
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
-          yes | $ANDROID_HOME/tools/bin/sdkmanager --licenses 2>/dev/null || true
 
-      # 4. Setup Gradle with caching
+          if [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+          fi
+
+          if [ -x "$ANDROID_HOME/tools/bin/sdkmanager" ]; then
+            yes | "$ANDROID_HOME/tools/bin/sdkmanager" --licenses || true
+          fi
+
+      # 8. Setup Gradle
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: 8.6
 
-      # 5. Build Android Release and Debug APKs
-      - name: Build Android APK
+      # 9. Build Android Release APK ONLY
+      - name: Build Android Release APK
         run: |
           chmod +x ./gradlew
-          echo "=== 1. Building Debug APK ==="
-          ./gradlew :app:assembleDebug --stacktrace --no-daemon
-          echo "=== 2. Building Release APK ==="
-          ./gradlew :app:assembleRelease --stacktrace --no-daemon || echo "Notice: Release build completed or using signed debug"
-          echo "=== 3. Generated APK Files ==="
-          find app/build/outputs/apk/ -type f -name "*.apk"
 
-      # 6. Upload Generated APKs to Artifacts
-      - name: Upload APK Artifact
+          echo "========================================"
+          echo "Building Sami Release APK"
+          echo "========================================"
+
+          ./gradlew :app:assembleRelease --stacktrace --no-daemon
+
+          echo "========================================"
+          echo "Checking Generated Release APK"
+          echo "========================================"
+
+          if [ ! -f "app/build/outputs/apk/release/app-release.apk" ]; then
+            echo "ERROR: app-release.apk was not generated."
+            echo "Available APK files:"
+            find app/build/outputs/apk/ -type f -name "*.apk" 2>/dev/null || true
+            exit 1
+          fi
+
+          echo "Release APK generated successfully:"
+          ls -lh app/build/outputs/apk/release/app-release.apk
+
+      # 10. Upload Release APK ONLY
+      - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
-          name: Sami-Trading-Tracker-APK
-          path: app/build/outputs/apk/**/*.apk
+          name: Sami-Trading-Tracker-Release
+          path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 30
 
-      # 7. Summary Report in GitHub
+      # 11. Publish Build Summary
       - name: Publish Build Summary
         if: always()
+        env:
+          BUILD_STATUS: ${{ job.status }}
         run: |
-          echo "### 🚀 تقرير بناء تطبيق Sami بنجاح" >> $GITHUB_STEP_SUMMARY
-          echo "- **حزم APK**: تم بناء حزم Debug و Release بنجاح تام." >> $GITHUB_STEP_SUMMARY
-          echo "- **التحميل المباشر**: يمكنك تنزيل ملف الـ APK مباشرة من صندوق **Artifacts** في أعلى صفحة هذا التشغيل (Sami-Trading-Tracker-APK)." >> $GITHUB_STEP_SUMMARY
-          echo "- **تحديث الويب**: تم دمج آخر أكواد الويب والتصميم الأسود والذهبي داخل أصول التطبيق." >> $GITHUB_STEP_SUMMARY
+          echo "## Sami Android Release Build Report" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$BUILD_STATUS" = "success" ]; then
+            echo "### Build Status: SUCCESS" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Build Status: FAILED" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Build target: Android Release APK only" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Expected APK: app-release.apk" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Artifact name: Sami-Trading-Tracker-Release" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Debug APK is not explicitly built or uploaded by this workflow." >> "$GITHUB_STEP_SUMMARY"
+          echo "- Web application build is included in the workflow." >> "$GITHUB_STEP_SUMMARY"
